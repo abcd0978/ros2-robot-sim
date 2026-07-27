@@ -25,6 +25,54 @@
 아니다 — 상태가 바뀔 때만 발행하는 설계이고, 그래서 TRANSIENT_LOCAL이 필요하다: 값을 안
 바꾸는데 계속 쏘면 굳이 latched로 만들 이유가 없다).
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`robot_sim.cpp` 에 추가:
+
+```cpp
+// ── include 추가 ──
+#include <string>
+#include "std_msgs/msg/string.hpp"
+
+// ── private: 메서드 추가 ──
+  void set_status(const std::string & s)
+  {
+    // TODO: status_ 와 값이 다를 때만 status_ 갱신 후 status_pub_ 로 발행
+  }
+
+// ── private: 멤버 추가 ──
+  std::string status_{"IDLE"};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
+
+// ── 생성자에 추가 ──
+    // TODO: status_pub_ = create_publisher<std_msgs::msg::String>(
+    //         "robot_status", rclcpp::QoS(1).reliable().transient_local());
+    // TODO: set_status("IDLE");
+```
+
+`mission_client.cpp` 에 추가:
+
+```cpp
+// ── include 추가 ──
+#include "std_msgs/msg/string.hpp"
+
+// ── private: 추가 ──
+  void on_status(const std_msgs::msg::String::SharedPtr msg)
+  {
+    // TODO: 상태 변화를 RCLCPP_INFO 로 출력
+    (void)msg;
+  }
+
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_sub_;
+
+// ── 생성자에 추가 ──
+    // TODO: status_sub_ 생성. QoS는 퍼블리셔와 동일하게
+    //       rclcpp::QoS(1).reliable().transient_local()
+```
+
 ## 힌트
 퍼블리셔 생성 (토픽 이름, QoS):
 ```cpp

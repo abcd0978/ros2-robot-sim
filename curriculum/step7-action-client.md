@@ -16,6 +16,76 @@
 ## 만들 것
 mission_client에 `/navigate_to` 액션 클라이언트, `waypoints` 파라미터, `/start_mission` 서비스를 추가한다. 이 스텝이 끝나면 `/start_mission`을 호출했을 때 로봇이 waypoints를 순서대로 전부 방문한다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`mission_client.cpp` 에 추가:
+
+```cpp
+// ── include 추가 ──
+#include <vector>
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "std_srvs/srv/trigger.hpp"
+#include "mini_mission_interfaces/action/navigate_to.hpp"
+
+// ── public: 맨 위에 타입 별칭 추가 ──
+  using NavigateTo = mini_mission_interfaces::action::NavigateTo;
+  using GoalHandle = rclcpp_action::ClientGoalHandle<NavigateTo>;
+
+// ── private: 메서드 추가 ──
+  void on_start(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    // TODO: 이미 미션 중이면 거절. 아니면 wp_index_ = 0 후 send_next_waypoint()
+    (void)req; (void)res;
+  }
+
+  void send_next_waypoint()
+  {
+    // TODO: wp_index_ 가 끝까지 갔으면 종료 처리
+    // TODO: waypoints_[wp_index_*2], waypoints_[wp_index_*2+1] 로 Goal 구성
+    // TODO: SendGoalOptions 에 콜백 3개를 연결하고 nav_client_->async_send_goal(goal, options)
+  }
+
+  void on_goal_response(GoalHandle::SharedPtr goal_handle)
+  {
+    // TODO: nullptr 이면 서버가 goal 을 거절한 것
+    (void)goal_handle;
+  }
+
+  void on_feedback(
+    GoalHandle::SharedPtr goal_handle,
+    const std::shared_ptr<const NavigateTo::Feedback> feedback)
+  {
+    // TODO: feedback->distance_remaining 출력
+    (void)goal_handle; (void)feedback;
+  }
+
+  void on_result(const GoalHandle::WrappedResult & result)
+  {
+    // TODO: result.code 가 ResultCode::SUCCEEDED 면
+    //       wp_index_++ 후 send_next_waypoint() 로 다음 목표
+    (void)result;
+  }
+
+// ── private: 멤버 추가 ──
+  std::vector<double> waypoints_;
+  size_t wp_index_{0};
+
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_srv_;
+  rclcpp_action::Client<NavigateTo>::SharedPtr nav_client_;
+
+// ── 생성자에 추가 ──
+    // TODO: declare_parameter("waypoints", std::vector<double>{1.0,0.0, 1.0,1.0, 0.0,1.0, 0.0,0.0});
+    // TODO: nav_client_ = rclcpp_action::create_client<NavigateTo>(this, "navigate_to");
+    // TODO: start_srv_ = create_service<std_srvs::srv::Trigger>("start_mission", ...);
+```
+
+`SendGoalOptions` 는 `rclcpp_action::Client<NavigateTo>::SendGoalOptions()` 로 만든다. Humble의 `goal_response_callback` 은 `GoalHandle::SharedPtr` 를 직접 받는다 — 예전 배포판의 `std::shared_future` 형태가 아니다.
+
 ## 힌트
 - 클라이언트 생성: `rclcpp_action::create_client<mini_mission_interfaces::action::NavigateTo>(this, "navigate_to")`
 - 서버 대기: `client_->wait_for_action_server(std::chrono::seconds(N))` — 실패 시 false 반환

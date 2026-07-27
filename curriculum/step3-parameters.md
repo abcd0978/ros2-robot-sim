@@ -24,6 +24,44 @@
 `create_wall_timer`를 호출해서 멤버 타이머 핸들을 교체해야 한다. 이 재생성 로직을
 `on_set_parameters_callback` 안에서 처리한다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`robot_sim.cpp` 에 **추가**한다.
+
+```cpp
+// ── include 추가 ──
+#include <vector>
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
+
+// ── private: 메서드 추가 ──
+  rcl_interfaces::msg::SetParametersResult
+  on_param_change(const std::vector<rclcpp::Parameter> & params)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+    // TODO: params 를 순회하며 get_name() 으로 분기
+    // TODO: 검증 통과하면 멤버 변수에 반영, 실패하면
+    //       result.successful = false; result.reason = "...";
+    return result;
+  }
+
+// ── private: 멤버 추가 ──
+  double max_speed_{1.0};
+  double pos_tolerance_{0.05};
+  double publish_rate_{10.0};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
+
+// ── 생성자에 추가 ──
+    // TODO: declare_parameter<double>("max_speed", 1.0);  (3개)
+    // TODO: param_cb_ = add_on_set_parameters_callback(
+    //         std::bind(&RobotSim::on_param_change, this, std::placeholders::_1));
+```
+
+`param_cb_` 의 반환 핸들을 멤버로 잡아두지 않으면 콜백이 즉시 해제된다. 반드시 보관해야 한다.
+
 ## 힌트
 파라미터 선언 (3개, 타입과 기본값 인자):
 ```cpp

@@ -21,6 +21,50 @@
 
 CMakeLists.txt에 `mission_client` 실행파일을 추가한다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+이번 스텝에서 만들 `mission_client.cpp`의 전체 뼈대다.
+
+파일: `src/mini_mission/src/mission_client.cpp` (새로 만든다)
+
+```cpp
+#include <memory>
+
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
+
+class MissionClient : public rclcpp::Node
+{
+public:
+  MissionClient()
+  : Node("mission_client")
+  {
+    // TODO: odom_sub_ 생성 (create_subscription)
+    //       QoS는 rclcpp::SensorDataQoS() — 퍼블리셔와 반드시 맞춰야 한다
+  }
+
+private:
+  void on_odom(const geometry_msgs::msg::Pose2D::SharedPtr msg)
+  {
+    // TODO: 받은 위치를 RCLCPP_INFO 로 출력해본다
+    (void)msg;
+  }
+
+  rclcpp::Subscription<geometry_msgs::msg::Pose2D>::SharedPtr odom_sub_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<MissionClient>());
+  rclcpp::shutdown();
+  return 0;
+}
+```
+
+`robot_sim` 쪽 `odom_pub_` 의 QoS도 `rclcpp::SensorDataQoS()` 로 바꾼다. 양쪽이 안 맞으면 콜백이 아예 안 불린다.
+
 ## 힌트
 구독 생성 (토픽 이름, QoS, 콜백):
 ```cpp

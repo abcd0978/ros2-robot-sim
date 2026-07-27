@@ -26,6 +26,39 @@ robot_sim에 `/reset_pose` (`std_srvs/srv/Trigger`) 서비스 서버를 추가�
 
 판단 기준: 데이터가 시간에 따라 계속 흐르면 토픽, 한 번의 요청에 한 번의 답이면 서비스.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`robot_sim.cpp` 에 추가:
+
+```cpp
+// ── include 추가 ──
+#include "std_srvs/srv/trigger.hpp"
+
+// ── private: 메서드 추가 ──
+  void on_reset(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    // TODO: x_, y_, theta_ 를 0 으로 되돌린다
+    // TODO: res->success 와 res->message 를 채운다
+    (void)req;
+  }
+
+// ── private: 멤버 추가 ──
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
+
+// ── 생성자에 추가 ──
+    // TODO: reset_srv_ = create_service<std_srvs::srv::Trigger>(
+    //         "reset_pose",
+    //         std::bind(&RobotSim::on_reset, this,
+    //                   std::placeholders::_1, std::placeholders::_2));
+```
+
+`Trigger` 는 Request 가 비어 있다. 그래서 `req` 는 쓰지 않고 `(void)req;` 로 미사용 경고만 막는다.
+
 ## 힌트
 - `rclcpp::Node::create_service<std_srvs::srv::Trigger>("reset_pose", 콜백)`
 - 콜백 시그니처:

@@ -22,6 +22,53 @@
 
 CMakeLists.txt에 `robot_sim` 실행파일을 추가한다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+이번 스텝에서 만들 `robot_sim.cpp`의 전체 뼈대다.
+
+파일: `src/mini_mission/src/robot_sim.cpp`
+
+```cpp
+#include <chrono>
+#include <memory>
+
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
+
+class RobotSim : public rclcpp::Node
+{
+public:
+  RobotSim()
+  : Node("robot_sim")
+  {
+    // TODO: odom_pub_ 생성 (create_publisher, 토픽명 "odom")
+    // TODO: timer_ 생성 (create_wall_timer, 100ms → 10Hz)
+  }
+
+private:
+  void on_timer()
+  {
+    // TODO: Pose2D 메시지에 x_, y_, theta_ 를 담아 odom_pub_ 로 publish
+  }
+
+  double x_{0.0}, y_{0.0}, theta_{0.0};
+
+  rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr odom_pub_;
+  rclcpp::TimerBase::SharedPtr timer_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<RobotSim>());
+  rclcpp::shutdown();
+  return 0;
+}
+```
+
+`Pose2D` 의 헤더 이름이 `pose2_d.hpp` 인 것에 주의한다. 메시지 타입명은 CamelCase, 헤더는 snake_case로 변환된다.
+
 ## 힌트
 클래스 골격:
 ```cpp

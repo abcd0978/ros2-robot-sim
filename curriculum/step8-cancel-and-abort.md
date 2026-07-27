@@ -16,6 +16,45 @@
 ## 만들 것
 robot_sim의 execute 루프에 취소 체크를 넣고, mission_client에 `/abort_mission` 서비스를 추가해 진행 중인 goal을 취소한다. 취소되면 `/robot_status`가 `ABORTED`로 바뀐다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`mission_client.cpp` 에 추가:
+
+```cpp
+// ── private: 메서드 추가 ──
+  void on_abort(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    // TODO: current_goal_ 이 있으면 nav_client_->async_cancel_goal(current_goal_)
+    // TODO: wp_index_ 리셋, res 채우기
+    (void)req; (void)res;
+  }
+
+// ── private: 멤버 추가 ──
+  GoalHandle::SharedPtr current_goal_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr abort_srv_;
+
+// ── on_goal_response 안에 추가 ──
+    // TODO: current_goal_ = goal_handle;  (취소하려면 핸들을 들고 있어야 한다)
+```
+
+`robot_sim.cpp` 의 `execute()` 루프에 추가:
+
+```cpp
+    // TODO: 루프 매 반복 맨 앞에서
+    //   if (goal_handle->is_canceling()) {
+    //     set_status("ABORTED");
+    //     goal_handle->canceled(result);
+    //     return;
+    //   }
+```
+
+`handle_cancel` 에서 ACCEPT 를 반환해도 이 체크가 없으면 아무 일도 일어나지 않는다. 취소는 협조적(cooperative)이다.
+
 ## 힌트
 ### 서버 쪽 (robot_sim)
 - `handle_cancel`은 대부분의 경우 `CancelResponse::ACCEPT`를 반환하면 된다

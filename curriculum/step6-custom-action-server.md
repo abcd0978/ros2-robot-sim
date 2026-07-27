@@ -92,23 +92,84 @@ ros2 topic list --include-hidden-topics | grep navigate_to
 
 `mini_mission`의 `package.xml`/`CMakeLists.txt`에 `rclcpp_action`, `mini_mission_interfaces` 의존을 추가한다.
 
+## 스켈레톤
+**아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
+
+기존 파일에 더할 부분만 발췌했다.
+
+`robot_sim.cpp` 에 추가:
+
+```cpp
+// ── include 추가 ──
+#include <cmath>
+#include <thread>
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "mini_mission_interfaces/action/navigate_to.hpp"
+
+// ── public: 맨 위에 타입 별칭 추가 ──
+  using NavigateTo = mini_mission_interfaces::action::NavigateTo;
+  using GoalHandle = rclcpp_action::ServerGoalHandle<NavigateTo>;
+
+// ── private: 메서드 추가 ──
+  rclcpp_action::GoalResponse handle_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const NavigateTo::Goal> goal)
+  {
+    // TODO: goal 좌표 검증. 거부하려면 GoalResponse::REJECT
+    (void)uuid; (void)goal;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel(
+    const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    (void)goal_handle;
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted(const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    // TODO: std::thread{std::bind(&RobotSim::execute, this, goal_handle)}.detach();
+    //       여기서 execute 를 직접 부르면 노드 전체가 멈춘다
+    (void)goal_handle;
+  }
+
+  void execute(const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    // TODO: 루프
+    //   1) 목표까지 남은 거리 계산
+    //   2) pos_tolerance_ 이내면 결과 채우고 goal_handle->succeed(result) 후 종료
+    //   3) 아니면 max_speed_ * dt 만큼 전진, set_status("MOVING")
+    //   4) goal_handle->publish_feedback(feedback)
+    //   5) publish_rate_ 주기로 sleep 후 반복
+    (void)goal_handle;
+  }
+
+// ── private: 멤버 추가 ──
+  rclcpp_action::Server<NavigateTo>::SharedPtr nav_server_;
+
+// ── 생성자에 추가 ──
+    // TODO: nav_server_ = rclcpp_action::create_server<NavigateTo>(
+    //         this, "navigate_to",
+    //         std::bind(&RobotSim::handle_goal, this,
+    //                   std::placeholders::_1, std::placeholders::_2),
+    //         std::bind(&RobotSim::handle_cancel, this, std::placeholders::_1),
+    //         std::bind(&RobotSim::handle_accepted, this, std::placeholders::_1));
+```
+
+`goal_handle->get_goal()` 로 Goal 에, `std::make_shared<NavigateTo::Result>()` / `::Feedback` 로 결과·피드백 객체에 접근한다.
+
 ## 힌트
-- 서버 생성: `rclcpp_action::create_server<mini_mission_interfaces::action::NavigateTo>(this, "navigate_to", handle_goal, handle_cancel, handle_accepted)`
-- 콜백 시그니처와 반환값:
-  ```cpp
-  rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID &, std::shared_ptr<const NavigateTo::Goal>);
-  rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleNavigateTo>);
-  void handle_accepted(const std::shared_ptr<GoalHandleNavigateTo>);
-  ```
-  - `handle_goal`은 `GoalResponse::ACCEPT_AND_EXECUTE` 또는 `REJECT`를 반환
-  - `handle_cancel`은 `CancelResponse::ACCEPT` 또는 `REJECT`를 반환
-  - `handle_accepted`에서는 **반드시 별도 스레드로 실행을 넘긴다.** 여기서 직접 실행하면 executor 스레드가 막혀 구독/다른 서비스가 전부 멈춘다. `std::thread{...}.detach()` 패턴을 쓴다
+- 콜백 3개의 역할:
+  - `handle_goal` — goal을 받을지 말지 결정. `GoalResponse::ACCEPT_AND_EXECUTE` 또는 `REJECT`
+  - `handle_cancel` — 취소 요청을 받을지 결정. `CancelResponse::ACCEPT` 또는 `REJECT`
+  - `handle_accepted` — 수락된 goal을 실제로 굴리기 시작. **반드시 별도 스레드로 넘긴다.** 여기서 직접 실행하면 executor 스레드가 막혀 구독·서비스가 전부 멈춘다
 - execute 로직(프로즈로 직접 구현):
   - 목표 (x, y)까지의 남은 거리를 계산한다
   - 거리가 `pos_tolerance` 이내면 성공 처리
   - 아니면 `max_speed * dt`만큼 목표 방향으로 전진시키고, `/robot_status`를 `MOVING`으로, feedback으로 `distance_remaining`을 발행한 뒤 `publish_rate`에 맞춰 sleep, 다시 거리 계산부터 반복
   - 도착하면 `/robot_status`를 `REACHED`로 바꾸고 Result의 `elapsed_sec`, `reached`를 채운다
-- 관련 API: `GoalHandleNavigateTo::publish_feedback(feedback)`, `::succeed(result)`, `::abort(result)`
+- 관련 API: `goal_handle->publish_feedback(feedback)`, `->succeed(result)`, `->abort(result)`
 - goal 데이터는 `goal_handle->get_goal()`로 접근한다
 
 ## 검증
