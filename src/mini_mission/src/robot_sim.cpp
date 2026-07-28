@@ -26,8 +26,7 @@ public:
     //   = KEEP_LAST(10) + RELIABLE + VOLATILE. Step 2 에서 SensorDataQoS() 로 바꾼다.
     // 반환 핸들을 멤버에 저장하는 게 필수. 지역 변수로 받으면 생성자 끝에서 참조 카운트가 0이 되어
     //   퍼블리셔가 소멸하고, 에러 없이 조용히 아무것도 발행되지 않는다.
-    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>("odom", 10);
-
+    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>("odom", rclcpp::QoS(rclcpp::SensorDataQoS()));
     // wall timer = 벽시계(실제 경과) 시간 기준. ROS 시뮬레이션 시간(/clock, use_sim_time)을 따르지 않는다.
     // std::bind(&RobotSim::on_timer, this) — 멤버 함수는 '어느 객체의' 것인지가 필요해서 그냥 넘길 수 없다.
     //   this 를 묶어 인자 없는 호출 가능 객체로 만든다. [this]() { on_timer(); } 람다도 완전히 동일하다.

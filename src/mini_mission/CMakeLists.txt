@@ -26,6 +26,13 @@ endif()
 
 add_executable(robot_sim src/robot_sim.cpp)
 ament_target_dependencies(robot_sim rclcpp geometry_msgs)
-install(TARGETS robot_sim DESTINATION lib/${PROJECT_NAME})
+
+add_executable(mission_client src/mission_client.cpp)
+ament_target_dependencies(mission_client rclcpp geometry_msgs)
+
+install(TARGETS
+  robot_sim
+  mission_client
+  DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
