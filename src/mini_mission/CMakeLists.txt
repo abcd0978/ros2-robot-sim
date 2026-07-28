@@ -24,4 +24,8 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+add_executable(robot_sim src/robot_sim.cpp)
+ament_target_dependencies(robot_sim rclcpp geometry_msgs)
+install(TARGETS robot_sim DESTINATION lib/${PROJECT_NAME})
+
 ament_package()
