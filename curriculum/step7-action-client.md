@@ -134,4 +134,154 @@ ros2 topic echo /odom
 - [ ] 웨이포인트를 다 돌면 콘솔에 총 소요 시간을 출력해보기
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+```cpp
+// ── include 추가 ──
+#include <vector>
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "std_srvs/srv/trigger.hpp"
+#include "mini_mission_interfaces/action/navigate_to.hpp"
+
+// ── public: 타입 별칭 ──
+  using NavigateTo = mini_mission_interfaces::action::NavigateTo;
+  using GoalHandle = rclcpp_action::ClientGoalHandle<NavigateTo>;
+
+// ── private: 메서드 추가 ──
+  void on_start(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    (void)req;
+    if (mission_active_) {
+      res->success = false;
+      res->message = "mission already running";
+      return;
+    }
+
+    waypoints_ = get_parameter("waypoints").as_double_array();
+    if (waypoints_.empty() || waypoints_.size() % 2 != 0) {
+      res->success = false;
+      res->message = "waypoints parameter is empty or has an odd number of values";
+      return;
+    }
+
+    if (!nav_client_->action_server_is_ready()) {
+      res->success = false;
+      res->message = "action server not available";
+      return;
+    }
+
+    wp_index_ = 0;
+    mission_active_ = true;
+    mission_start_ = now();
+    send_next_waypoint();
+    res->success = true;
+    res->message = "mission started";
+  }
+
+  void send_next_waypoint()
+  {
+    if (wp_index_ * 2 >= waypoints_.size()) {
+      mission_active_ = false;
+      double elapsed = (now() - mission_start_).seconds();
+      RCLCPP_INFO(get_logger(), "mission finished, total elapsed %.2fs", elapsed);
+      return;
+    }
+
+    auto goal = NavigateTo::Goal();
+    goal.x = waypoints_[wp_index_ * 2];
+    goal.y = waypoints_[wp_index_ * 2 + 1];
+
+    auto options = rclcpp_action::Client<NavigateTo>::SendGoalOptions();
+    options.goal_response_callback =
+      std::bind(&MissionClient::on_goal_response, this, std::placeholders::_1);
+    options.feedback_callback =
+      std::bind(&MissionClient::on_feedback, this, std::placeholders::_1, std::placeholders::_2);
+    options.result_callback =
+      std::bind(&MissionClient::on_result, this, std::placeholders::_1);
+
+    RCLCPP_INFO(
+      get_logger(), "sending waypoint %zu: (%.2f, %.2f)", wp_index_, goal.x, goal.y);
+    nav_client_->async_send_goal(goal, options);
+  }
+
+  void on_goal_response(GoalHandle::SharedPtr goal_handle)
+  {
+    if (!goal_handle) {
+      RCLCPP_ERROR(get_logger(), "goal rejected");
+      mission_active_ = false;
+      return;
+    }
+  }
+
+  void on_feedback(
+    GoalHandle::SharedPtr,
+    const std::shared_ptr<const NavigateTo::Feedback> feedback)
+  {
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "distance remaining: %.2f", feedback->distance_remaining);
+  }
+
+  void on_result(const GoalHandle::WrappedResult & result)
+  {
+    switch (result.code) {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        RCLCPP_INFO(
+          get_logger(), "waypoint reached=%d elapsed=%.2fs",
+          result.result->reached, result.result->elapsed_sec);
+        wp_index_++;
+        send_next_waypoint();
+        break;
+      case rclcpp_action::ResultCode::ABORTED:
+        RCLCPP_ERROR(get_logger(), "goal aborted");
+        mission_active_ = false;
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        RCLCPP_WARN(get_logger(), "mission canceled");
+        mission_active_ = false;
+        wp_index_ = 0;
+        break;
+      default:
+        RCLCPP_ERROR(get_logger(), "unknown result code");
+        mission_active_ = false;
+        break;
+    }
+  }
+
+// ── private: 멤버 추가 ──
+  std::vector<double> waypoints_;
+  size_t wp_index_{0};
+  bool mission_active_{false};
+  rclcpp::Time mission_start_;
+
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_srv_;
+  rclcpp_action::Client<NavigateTo>::SharedPtr nav_client_;
+
+// ── 생성자에 추가 ──
+    declare_parameter<std::vector<double>>(
+      "waypoints", {1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0});
+    waypoints_ = get_parameter("waypoints").as_double_array();
+
+    nav_client_ = rclcpp_action::create_client<NavigateTo>(this, "navigate_to");
+
+    start_srv_ = create_service<std_srvs::srv::Trigger>(
+      "start_mission",
+      std::bind(&MissionClient::on_start, this, std::placeholders::_1, std::placeholders::_2));
+```
+
+> 순차 실행은 `on_result` → `wp_index_++` → `send_next_waypoint()` 콜백 체인 하나로 끝난다. 루프도 스레드도 필요 없다.
+>
+> `on_start` 에서 `wait_for_action_server()` 대신 `action_server_is_ready()` 를 쓰는 이유: 서비스 콜백은 executor 스레드 위에서 돌기 때문에 여기서 블로킹하면 노드 전체가 그 시간만큼 멈춘다.
+>
+> `waypoints_` 를 생성자에서 한 번 읽고 끝내지 않고 `on_start` 에서 다시 읽는 이유: 실행 중에 `ros2 param set /mission_client waypoints "[...]"` 로 바꾼 값이 다음 미션에 반영되게 하려는 것이다.
+
+</details>
+
+---
 다음: [Step 8 — 취소 처리](step8-cancel-and-abort.md)

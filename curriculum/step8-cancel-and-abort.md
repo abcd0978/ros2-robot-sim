@@ -105,4 +105,65 @@ ros2 action send_goal /navigate_to mini_mission_interfaces/action/NavigateTo "{x
 - [ ] `/abort_mission`을 미션이 없을 때 호출하면 어떤 응답이 오는지 정의하고 구현
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+**`robot_sim.cpp` — `execute()` 루프 맨 앞에 추가**
+```cpp
+      if (goal_handle->is_canceling()) {
+        result->elapsed_sec = (now() - start).seconds();
+        result->reached = false;
+        set_status("ABORTED");
+        goal_handle->canceled(result);
+        RCLCPP_INFO(get_logger(), "goal canceled");
+        return;
+      }
+```
+
+**`mission_client.cpp` 추가분**
+```cpp
+// ── private: 메서드 추가 ──
+  void on_abort(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    (void)req;
+    if (!mission_active_ || !current_goal_) {
+      res->success = false;
+      res->message = "no mission in progress";
+      return;
+    }
+
+    nav_client_->async_cancel_goal(current_goal_);
+    current_goal_.reset();
+    mission_active_ = false;
+    wp_index_ = 0;
+    res->success = true;
+    res->message = "mission aborted";
+  }
+
+// ── private: 멤버 추가 ──
+  GoalHandle::SharedPtr current_goal_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr abort_srv_;
+
+// ── on_goal_response 안, null 체크 뒤에 추가 ──
+    current_goal_ = goal_handle;
+
+// ── send_next_waypoint / on_result 안, 미션이 끝나거나 goal 이 끝날 때마다 ──
+    current_goal_.reset();
+
+// ── 생성자에 추가 ──
+    abort_srv_ = create_service<std_srvs::srv::Trigger>(
+      "abort_mission",
+      std::bind(&MissionClient::on_abort, this, std::placeholders::_1, std::placeholders::_2));
+```
+
+> `on_result` 의 `CANCELED` 분기에서만 `wp_index_ = 0` 으로 되돌린다. 이걸 빼먹으면 다음 `/start_mission` 이 중간 웨이포인트부터 시작한다.
+
+</details>
+
+---
 다음: [Step 9 — launch 파일과 통합](step9-launch-and-integration.md)

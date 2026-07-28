@@ -122,4 +122,101 @@ ros2 param get /robot_sim max_speed
 - [ ] `pos_tolerance`에 음수를 set해서 거부되는지 확인
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+```cpp
+// ── include 추가 ──
+#include <vector>
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
+
+// ── private: 메서드 추가 ──
+  void reset_timer()
+  {
+    timer_ = create_wall_timer(
+      std::chrono::duration<double>(1.0 / publish_rate_),
+      std::bind(&RobotSim::on_timer, this));
+  }
+
+  rcl_interfaces::msg::SetParametersResult on_param_change(
+    const std::vector<rclcpp::Parameter> & params)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+
+    bool rate_changed = false;
+
+    for (const auto & p : params) {
+      if (p.get_name() == "max_speed") {
+        if (p.as_double() <= 0.0) {
+          result.successful = false;
+          result.reason = "max_speed must be > 0.0";
+          return result;
+        }
+      } else if (p.get_name() == "pos_tolerance") {
+        if (p.as_double() < 0.0) {
+          result.successful = false;
+          result.reason = "pos_tolerance must be >= 0.0";
+          return result;
+        }
+      } else if (p.get_name() == "publish_rate") {
+        if (p.as_double() <= 0.0) {
+          result.successful = false;
+          result.reason = "publish_rate must be > 0.0";
+          return result;
+        }
+      }
+    }
+
+    for (const auto & p : params) {
+      if (p.get_name() == "max_speed") {
+        max_speed_ = p.as_double();
+      } else if (p.get_name() == "pos_tolerance") {
+        pos_tolerance_ = p.as_double();
+      } else if (p.get_name() == "publish_rate") {
+        publish_rate_ = p.as_double();
+        rate_changed = true;
+      }
+    }
+
+    if (rate_changed) {
+      timer_->cancel();
+      reset_timer();
+    }
+
+    return result;
+  }
+
+// ── private: 멤버 추가 ──
+  double max_speed_{1.0};
+  double pos_tolerance_{0.05};
+  double publish_rate_{10.0};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
+
+// ── 생성자: declare + 읽기 (맨 앞에) ──
+    declare_parameter<double>("max_speed", 1.0);
+    declare_parameter<double>("pos_tolerance", 0.05);
+    declare_parameter<double>("publish_rate", 10.0);
+
+    max_speed_ = get_parameter("max_speed").as_double();
+    pos_tolerance_ = get_parameter("pos_tolerance").as_double();
+    publish_rate_ = get_parameter("publish_rate").as_double();
+
+// ── 생성자: 콜백 등록 + 타이머 생성 (맨 뒤에) ──
+    param_cb_ = add_on_set_parameters_callback(
+      std::bind(&RobotSim::on_param_change, this, std::placeholders::_1));
+
+    reset_timer();
+```
+
+> `rclcpp::TimerBase` 에는 주기 변경 API가 없다. 그래서 `reset_timer()` 로 생성 로직을 한 번만 쓰고, 생성자와 파라미터 콜백 양쪽에서 부른다.
+>
+> 검증을 두 루프로 나눈 이유: 한 번의 `ros2 param set` 에 여러 파라미터가 실려 올 수 있는데, 앞부분만 반영하고 뒤에서 거부하면 절반만 적용된 상태가 남는다. 전부 검증한 뒤에 전부 반영한다.
+
+</details>
+
+---
 다음: [Step 4 — QoS 파고들기](step4-qos-deep-dive.md)

@@ -121,4 +121,64 @@ Subscription count 1이 보이고, QoS profile에 `RELIABILITY: BEST_EFFORT`,
 - [ ] `ros2 topic info /odom -v` 출력의 QoS profile 필드를 하나씩 읽어보기
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+**`mission_client.cpp` 전체**
+```cpp
+#include <memory>
+
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
+
+class MissionClient : public rclcpp::Node
+{
+public:
+  MissionClient()
+  : Node("mission_client")
+  {
+    odom_sub_ = create_subscription<geometry_msgs::msg::Pose2D>(
+      "odom", rclcpp::SensorDataQoS(),
+      std::bind(&MissionClient::on_odom, this, std::placeholders::_1));
+  }
+
+private:
+  void on_odom(const geometry_msgs::msg::Pose2D::SharedPtr msg)
+  {
+    RCLCPP_INFO(get_logger(), "odom: x=%.2f y=%.2f theta=%.2f", msg->x, msg->y, msg->theta);
+  }
+
+  rclcpp::Subscription<geometry_msgs::msg::Pose2D>::SharedPtr odom_sub_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<MissionClient>());
+  rclcpp::shutdown();
+  return 0;
+}
+```
+
+**`robot_sim.cpp` 수정분** — QoS 인자 한 줄만 바꾼다.
+```cpp
+    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>(
+      "odom", rclcpp::SensorDataQoS());
+```
+
+**CMakeLists.txt 추가분**
+```
+add_executable(mission_client src/mission_client.cpp)
+ament_target_dependencies(mission_client rclcpp geometry_msgs)
+install(TARGETS mission_client DESTINATION lib/${PROJECT_NAME})
+```
+
+> 10Hz 로그가 콘솔을 뒤덮는 게 거슬리면 `RCLCPP_INFO` 대신 `RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, ...)` 을 쓴다. Step 7 이후의 최종 코드는 이쪽을 쓴다.
+
+</details>
+
+---
 다음: [Step 3 — 파라미터](step3-parameters.md)

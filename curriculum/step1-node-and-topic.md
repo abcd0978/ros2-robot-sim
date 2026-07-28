@@ -133,4 +133,71 @@ ros2 topic echo /odom
 - [ ] 타이머 주기를 200ms로 바꿔 `ros2 topic hz`가 5로 바뀌는지 확인 후 100ms로 복구
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+이 스텝을 마친 시점의 `robot_sim.cpp` 전체다.
+
+```cpp
+#include <chrono>
+#include <memory>
+
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
+
+class RobotSim : public rclcpp::Node
+{
+public:
+  RobotSim()
+  : Node("robot_sim")
+  {
+    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>("odom", 10);
+
+    timer_ = create_wall_timer(
+      std::chrono::milliseconds(100),
+      std::bind(&RobotSim::on_timer, this));
+
+    RCLCPP_INFO(get_logger(), "robot_sim started");
+  }
+
+private:
+  void on_timer()
+  {
+    geometry_msgs::msg::Pose2D msg;
+    msg.x = x_;
+    msg.y = y_;
+    msg.theta = theta_;
+    odom_pub_->publish(msg);
+  }
+
+  double x_{0.0}, y_{0.0}, theta_{0.0};
+
+  rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr odom_pub_;
+  rclcpp::TimerBase::SharedPtr timer_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<RobotSim>());
+  rclcpp::shutdown();
+  return 0;
+}
+```
+
+**CMakeLists.txt 추가분** (`ament_package()` 앞):
+```
+add_executable(robot_sim src/robot_sim.cpp)
+ament_target_dependencies(robot_sim rclcpp geometry_msgs)
+install(TARGETS robot_sim DESTINATION lib/${PROJECT_NAME})
+```
+
+> `std::bind(&RobotSim::on_timer, this)` 대신 `[this]() { on_timer(); }` 람다를 써도 동일하다.
+
+</details>
+
+---
 다음: [Step 2 — 구독자와 QoS 첫 만남](step2-subscriber-and-qos.md)

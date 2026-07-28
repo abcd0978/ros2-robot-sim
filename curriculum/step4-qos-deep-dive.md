@@ -152,4 +152,63 @@ QoS profile에서 publisher의 RELIABILITY가 BEST_EFFORT인지 확인한다.
       과거 값을 보관한다는 것을 확인)
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+**`robot_sim.cpp` 추가분**
+```cpp
+// ── include 추가 ──
+#include <string>
+#include "std_msgs/msg/string.hpp"
+
+// ── private: 메서드 추가 ──
+  void set_status(const std::string & s)
+  {
+    if (s != status_) {
+      status_ = s;
+      std_msgs::msg::String msg;
+      msg.data = status_;
+      status_pub_->publish(msg);
+      RCLCPP_INFO(get_logger(), "status -> %s", status_.c_str());
+    }
+  }
+
+// ── private: 멤버 추가 ──
+  std::string status_{""};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
+
+// ── 생성자에 추가 ──
+    status_pub_ = create_publisher<std_msgs::msg::String>(
+      "robot_status", rclcpp::QoS(1).reliable().transient_local());
+
+    set_status("IDLE");
+```
+
+**`mission_client.cpp` 추가분**
+```cpp
+// ── include 추가 ──
+#include "std_msgs/msg/string.hpp"
+
+// ── private: 추가 ──
+  void on_status(const std_msgs::msg::String::SharedPtr msg)
+  {
+    RCLCPP_INFO(get_logger(), "status: %s", msg->data.c_str());
+  }
+
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_sub_;
+
+// ── 생성자에 추가 ──
+    status_sub_ = create_subscription<std_msgs::msg::String>(
+      "robot_status", rclcpp::QoS(1).reliable().transient_local(),
+      std::bind(&MissionClient::on_status, this, std::placeholders::_1));
+```
+
+> **스켈레톤과 다른 점 하나.** 스켈레톤에는 `std::string status_{"IDLE"};` 로 되어 있지만 정답은 `""` 로 초기화한다. `"IDLE"` 로 두면 생성자의 `set_status("IDLE")` 이 "값이 안 바뀌었다"고 판단해 발행을 건너뛴다. 그러면 `/robot_status` 에 아무것도 안 실려서 TRANSIENT_LOCAL 실험(실험 1)이 조용히 실패한다. 빈 문자열로 시작해야 첫 전이가 실제 발행으로 이어진다.
+
+</details>
+
+---
 다음: [Step 5 — 서비스](step5-services.md)

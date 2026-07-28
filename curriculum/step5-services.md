@@ -102,4 +102,49 @@ ros2 topic echo /odom
 - [ ] 이미 원점에 있을 때 호출하면 `message`에 다른 문구를 넣어보기
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+```cpp
+// ── include 추가 ──
+#include "std_srvs/srv/trigger.hpp"
+
+// ── private: 메서드 추가 ──
+  void on_reset_pose(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    (void)req;
+    if (x_ == 0.0 && y_ == 0.0 && theta_ == 0.0) {
+      res->success = true;
+      res->message = "already at origin";
+    } else {
+      x_ = 0.0;
+      y_ = 0.0;
+      theta_ = 0.0;
+      res->success = true;
+      res->message = "pose reset to origin";
+    }
+    RCLCPP_INFO(get_logger(), "reset_pose: %s", res->message.c_str());
+  }
+
+// ── private: 멤버 추가 ──
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
+
+// ── 생성자에 추가 ──
+    reset_srv_ = create_service<std_srvs::srv::Trigger>(
+      "reset_pose",
+      std::bind(&RobotSim::on_reset_pose, this, std::placeholders::_1, std::placeholders::_2));
+```
+
+> 스켈레톤의 메서드 이름은 `on_reset` 이었다. 정답은 `on_reset_pose` 를 쓴다 — 이름만 다르고 동작은 같으니 어느 쪽이든 상관없다.
+>
+> `package.xml` 의 `<depend>std_srvs</depend>` 와 CMakeLists 의 `ament_target_dependencies(robot_sim ... std_srvs)` 를 같이 추가해야 빌드된다.
+
+</details>
+
+---
 다음: [Step 6 — 커스텀 액션과 액션 서버](step6-custom-action-server.md)

@@ -192,4 +192,180 @@ ros2 action send_goal /navigate_to mini_mission_interfaces/action/NavigateTo "{x
 - [ ] `elapsed_sec`이 실제 걸린 시간과 맞는지 확인
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+**`src/mini_mission_interfaces/action/NavigateTo.action`**
+```
+# Goal
+float64 x
+float64 y
+---
+# Result
+float64 elapsed_sec
+bool reached
+---
+# Feedback
+float64 distance_remaining
+```
+
+**`src/mini_mission_interfaces/CMakeLists.txt`**
+```cmake
+cmake_minimum_required(VERSION 3.8)
+project(mini_mission_interfaces)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/NavigateTo.action"
+)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()
+```
+
+**`src/mini_mission_interfaces/package.xml`**
+```xml
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mini_mission_interfaces</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="mgkim@alux-platform.com">root</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+```
+
+**`robot_sim.cpp` 추가분**
+```cpp
+// ── include 추가 ──
+#include <cmath>
+#include <thread>
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "mini_mission_interfaces/action/navigate_to.hpp"
+
+// ── public: 타입 별칭 ──
+  using NavigateTo = mini_mission_interfaces::action::NavigateTo;
+  using GoalHandle = rclcpp_action::ServerGoalHandle<NavigateTo>;
+
+// ── private: 메서드 추가 ──
+  rclcpp_action::GoalResponse handle_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const NavigateTo::Goal> goal)
+  {
+    (void)uuid;
+    if (std::abs(goal->x) > 1000.0 || std::abs(goal->y) > 1000.0) {
+      RCLCPP_WARN(get_logger(), "rejecting goal (%.2f, %.2f): out of bounds", goal->x, goal->y);
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    (void)goal_handle;
+    RCLCPP_INFO(get_logger(), "cancel request received");
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted(const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    std::thread{std::bind(&RobotSim::execute, this, goal_handle)}.detach();
+  }
+
+  void execute(const std::shared_ptr<GoalHandle> goal_handle)
+  {
+    const auto start = now();
+    const auto goal = goal_handle->get_goal();
+    auto result = std::make_shared<NavigateTo::Result>();
+    auto feedback = std::make_shared<NavigateTo::Feedback>();
+
+    while (rclcpp::ok()) {
+      double dx = goal->x - x_;
+      double dy = goal->y - y_;
+      double dist = std::hypot(dx, dy);
+
+      if (dist <= pos_tolerance_) {
+        x_ = goal->x;
+        y_ = goal->y;
+        set_status("REACHED");
+        result->elapsed_sec = (now() - start).seconds();
+        result->reached = true;
+        goal_handle->succeed(result);
+        RCLCPP_INFO(get_logger(), "goal reached in %.2fs", result->elapsed_sec);
+        return;
+      }
+
+      set_status("MOVING");
+      double dt = 1.0 / publish_rate_;
+      double step = max_speed_ * dt;
+      if (step >= dist) {
+        x_ = goal->x;
+        y_ = goal->y;
+      } else {
+        x_ += dx / dist * step;
+        y_ += dy / dist * step;
+      }
+
+      feedback->distance_remaining = dist;
+      goal_handle->publish_feedback(feedback);
+
+      std::this_thread::sleep_for(std::chrono::duration<double>(dt));
+    }
+  }
+
+// ── private: 멤버 추가 ──
+  rclcpp_action::Server<NavigateTo>::SharedPtr action_server_;
+
+// ── 생성자에 추가 ──
+    action_server_ = rclcpp_action::create_server<NavigateTo>(
+      this,
+      "navigate_to",
+      std::bind(&RobotSim::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
+      std::bind(&RobotSim::handle_cancel, this, std::placeholders::_1),
+      std::bind(&RobotSim::handle_accepted, this, std::placeholders::_1));
+```
+
+> `mini_mission` 쪽 `package.xml` 에 `<depend>rclcpp_action</depend>` 와 `<depend>mini_mission_interfaces</depend>` 를, CMakeLists 의 `ament_target_dependencies(robot_sim ...)` 목록에 같은 둘을 추가한다. 인터페이스 패키지를 먼저 빌드하고 `source install/setup.bash` 를 다시 해야 헤더를 찾는다.
+>
+> `execute()` 에는 아직 취소 체크가 없다. Step 8 에서 추가한다.
+
+</details>
+
+---
 다음: [Step 7 — 액션 클라이언트와 미션 실행](step7-action-client.md)

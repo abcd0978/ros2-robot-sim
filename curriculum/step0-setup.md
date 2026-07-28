@@ -83,4 +83,34 @@ mini_mission`이 `/root/ros2-robot-sim/install/mini_mission` 경로를 출력한
 - [ ] `src/mini_mission/package.xml`이 생성되어 있는지 확인
 
 ---
+
+## 정답 코드
+
+<details>
+<summary>펼쳐서 보기 — 직접 구현한 뒤에 확인할 것</summary>
+
+코드가 아니라 명령 순서가 정답이다.
+
+```bash
+docker exec -it superpx4_ros2 bash
+echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc
+source /opt/ros/humble/setup.bash
+
+cd /root/ros2-robot-sim
+mkdir -p src
+cd src
+ros2 pkg create --build-type ament_cmake --license Apache-2.0 \
+  --dependencies rclcpp geometry_msgs std_msgs std_srvs -- mini_mission
+cd ..
+
+printf 'build/\ninstall/\nlog/\n' > .gitignore
+
+colcon build --symlink-install
+source install/setup.bash
+ros2 pkg prefix mini_mission
+```
+
+</details>
+
+---
 다음: [Step 1 — 노드와 토픽 발행](step1-node-and-topic.md)
