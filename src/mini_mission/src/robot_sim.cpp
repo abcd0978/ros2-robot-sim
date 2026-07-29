@@ -13,9 +13,7 @@ public:
   : Node("robot_sim")
   {
     odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>("odom", rclcpp::QoS(rclcpp::SensorDataQoS()));
-    timer_ = create_wall_timer(
-      std::chrono::milliseconds(100),   // 100ms = 10Hz
-      std::bind(&RobotSim::on_timer, this));
+    reset_timer();
 
     // 파라미터 설정, 콜백 연결
     declare_parameter<double>("max_speed", 1.0);
@@ -38,20 +36,57 @@ private:
     for (const auto & param : params) {
       std::string paramName = param.get_name();
       auto paramType = param.get_type();
+      auto paramValue = param.get_value<rclcpp::ParameterValue>();
       if (paramName == "max_speed") {
-        if ()
+        if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+          result.successful = false;
+          result.reason = "max_speed must be a double";
+          RCLCPP_WARN(get_logger(), "max_speed must be a double");
+          break;
+        } else if (paramValue.get<double>() <= 0.0) {
+          result.successful = false;
+          result.reason = "max_speed must be positive";
+          RCLCPP_WARN(get_logger(), "max_speed must be positive");
+          break;
+        }
         max_speed_ = param.as_double();
       } else if (paramName == "pos_tolerance") {
+        if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+          result.successful = false;
+          result.reason = "pos_tolerance must be a double";
+          RCLCPP_WARN(get_logger(), "pos_tolerance must be a double");
+          break;
+        } else if (paramValue.get<double>() <= 0.0) {
+          result.successful = false;
+          result.reason = "pos_tolerance must be positive";
+          RCLCPP_WARN(get_logger(), "pos_tolerance must be positive");
+          break;
+        }
         pos_tolerance_ = param.as_double();
       } else if (paramName == "publish_rate") {
+         if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+          result.successful = false;
+          result.reason = "publish_rate must be a double";
+          RCLCPP_WARN(get_logger(), "pos_tolerance must be a double");
+          break;
+        } else if (paramValue.get<double>() <= 0.0) {
+          result.successful = false;
+          result.reason = "publish_rate must be positive";
+          RCLCPP_WARN(get_logger(), "publish_rate must be positive");
+          break;
+        }
         publish_rate_ = param.as_double();
-      } else {
-        result.successful = false;
-        result.reason = "Unknown parameter: " + paramName;
-        RCLCPP_WARN(get_logger(), "Unknown parameter: %s", paramName.c_str());
+        reset_timer();
       }
     }
     return result;
+  }
+
+  void reset_timer()
+  {
+    timer_ = create_wall_timer(
+    std::chrono::duration<double>(1.0 / publish_rate_),   // Hz → 초. 2.0Hz면 0.5초
+    std::bind(&RobotSim::on_timer, this));
   }
 
   void on_timer()
