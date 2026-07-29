@@ -5,6 +5,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose2_d.hpp"
+#include <string>
+#include "std_msgs/msg/string.hpp"
+
+#include "mini_mission/robot_status.hpp"
+#include "mini_mission/topic.hpp"
+#include "mini_mission/param.hpp"
 
 class RobotSim : public rclcpp::Node
 {
@@ -12,21 +18,46 @@ public:
   RobotSim()
   : Node("robot_sim")
   {
-    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>("odom", rclcpp::QoS(rclcpp::SensorDataQoS()));
-    reset_timer();
+    // publisher 생성
+    odom_pub_ = create_publisher<geometry_msgs::msg::Pose2D>(
+      mini_mission::topic::ODOM, 
+      rclcpp::QoS(rclcpp::SensorDataQoS())
+    );
+    status_pub_ = create_publisher<std_msgs::msg::String>(
+      mini_mission::topic::ROBOT_STATUS, 
+      rclcpp::QoS(1).reliable().transient_local()
+    );
+    set_status(mini_mission::robot_status::IDLE);
 
     // 파라미터 설정, 콜백 연결
-    declare_parameter<double>("max_speed", 1.0);
-    declare_parameter<double>("pos_tolerance", 0.05);
-    declare_parameter<double>("publish_rate", 10.0);
-    // 각 파라미터에 대해 콜백을 등록하는게 아니라, 노드 전체에 대해 콜백을 등록하고, 콜백 안에서 파라미터 이름으로 분기.
+    declare_parameter<double>(mini_mission::param::MAX_SPEED, 1.0);
+    declare_parameter<double>(mini_mission::param::POS_TOLERANCE, 0.05);
+    declare_parameter<double>(mini_mission::param::PUBLISH_RATE, 10.0);
+    max_speed_     = get_parameter(mini_mission::param::MAX_SPEED).as_double();
+    pos_tolerance_ = get_parameter(mini_mission::param::POS_TOLERANCE).as_double();
+    publish_rate_  = get_parameter(mini_mission::param::PUBLISH_RATE).as_double();
+
+    reset_timer();
+
     param_cb_ = add_on_set_parameters_callback(
             std::bind(&RobotSim::on_param_change, this, std::placeholders::_1));
-      
+    // 로봇 노드 시작
     RCLCPP_INFO(get_logger(), "robot_sim started");
   }
 
 private:
+  // status 설정 및 퍼블리시
+  void set_status(const std::string & s)
+  {
+    if (this->status_ != s) {
+      this->status_ = s;
+      std_msgs::msg::String msg;
+      msg.data = s;
+      status_pub_->publish(msg);
+    }
+  }
+
+  //파라미터 변경 콜백
   rcl_interfaces::msg::SetParametersResult
    on_param_change(const std::vector<rclcpp::Parameter> & params)
   {
@@ -37,7 +68,9 @@ private:
       std::string paramName = param.get_name();
       auto paramType = param.get_type();
       auto paramValue = param.get_value<rclcpp::ParameterValue>();
-      if (paramName == "max_speed") {
+
+      // max_speed, pos_tolerance, publish_rate 파라미터 valid check
+      if (paramName == mini_mission::param::MAX_SPEED) {
         if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
           result.successful = false;
           result.reason = "max_speed must be a double";
@@ -50,7 +83,7 @@ private:
           break;
         }
         max_speed_ = param.as_double();
-      } else if (paramName == "pos_tolerance") {
+      } else if (paramName == mini_mission::param::POS_TOLERANCE) {
         if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
           result.successful = false;
           result.reason = "pos_tolerance must be a double";
@@ -63,7 +96,7 @@ private:
           break;
         }
         pos_tolerance_ = param.as_double();
-      } else if (paramName == "publish_rate") {
+      } else if (paramName == mini_mission::param::PUBLISH_RATE) {
          if (paramType != rclcpp::ParameterType::PARAMETER_DOUBLE) {
           result.successful = false;
           result.reason = "publish_rate must be a double";
@@ -85,7 +118,7 @@ private:
   void reset_timer()
   {
     timer_ = create_wall_timer(
-    std::chrono::duration<double>(1.0 / publish_rate_),   // Hz → 초. 2.0Hz면 0.5초
+    std::chrono::duration<double>(1.0 / publish_rate_),
     std::bind(&RobotSim::on_timer, this));
   }
 
@@ -109,6 +142,9 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr odom_pub_;
   
   rclcpp::TimerBase::SharedPtr timer_;
+
+  std::string status_{mini_mission::robot_status::NONE};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
 };
 
 int main(int argc, char ** argv)

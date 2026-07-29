@@ -25,10 +25,12 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(robot_sim src/robot_sim.cpp)
-ament_target_dependencies(robot_sim rclcpp geometry_msgs)
+ament_target_dependencies(robot_sim rclcpp geometry_msgs std_msgs)
+target_include_directories(robot_sim PRIVATE include)
 
 add_executable(mission_client src/mission_client.cpp)
-ament_target_dependencies(mission_client rclcpp geometry_msgs)
+ament_target_dependencies(mission_client rclcpp geometry_msgs std_msgs)
+target_include_directories(mission_client PRIVATE include)
 
 install(TARGETS
   robot_sim
