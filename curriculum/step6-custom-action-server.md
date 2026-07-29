@@ -80,11 +80,7 @@ source install/setup.bash
 ros2 interface show mini_mission_interfaces/action/NavigateTo
 ```
 
-액션 하나는 실제로 서비스 2~3개(`send_goal`, `cancel_goal`, `get_result`) + 토픽 2개(`feedback`, `status`)로 구현된다. 서버를 띄운 뒤 확인:
-```bash
-ros2 topic list --include-hidden-topics | grep navigate_to
-```
-`/navigate_to/_action/feedback`, `/navigate_to/_action/status` 등이 보인다.
+여기까지가 인터페이스 정의다. 액션 하나가 실제로 어떤 통신으로 구현되는지는 서버가 떠 있어야 볼 수 있으므로, 6-B 를 마친 뒤 아래 "검증"에서 확인한다.
 
 ---
 
@@ -179,6 +175,35 @@ ros2 action info /navigate_to -t
 ros2 action send_goal /navigate_to mini_mission_interfaces/action/NavigateTo "{x: 2.0, y: 1.0}" --feedback
 ```
 기대 결과: feedback이 주기적으로 출력되며 `distance_remaining`이 줄어들고, 다른 터미널의 `ros2 topic echo /odom`에서 로봇이 실제로 (2.0, 1.0) 방향으로 이동하는 것이 보인다. 도착하면 goal이 SUCCEEDED로 끝난다.
+
+### 액션은 실제로 무엇으로 만들어져 있나
+
+서버가 떠 있는 지금 확인해본다. 언더스코어로 시작하는 `_action` 이름들이라 기본 목록에는 안 나오고, 숨김 항목까지 켜야 보인다.
+
+```bash
+ros2 topic list --include-hidden-topics | grep navigate_to
+ros2 service list --include-hidden-services | grep navigate_to
+```
+기대 결과:
+```
+/navigate_to/_action/feedback        ← 토픽. 진행률 스트림
+/navigate_to/_action/status          ← 토픽. goal 상태(ACCEPTED/EXECUTING/SUCCEEDED...)
+
+/navigate_to/_action/send_goal       ← 서비스. goal 전송 + 수락/거절 응답
+/navigate_to/_action/cancel_goal     ← 서비스. 취소 요청
+/navigate_to/_action/get_result      ← 서비스. 최종 결과 받아오기
+```
+
+**액션 하나 = 서비스 3개 + 토픽 2개.** 왜 이 조합인지 보면 액션의 존재 이유가 그대로 드러난다.
+
+| 필요한 것 | 무엇으로 |
+|---|---|
+| 요청하고 수락 여부를 돌려받기 | 서비스 (`send_goal`) |
+| 오래 걸리는 동안 진행률 보기 | 토픽 (`feedback`) |
+| 도중에 멈추기 | 서비스 (`cancel_goal`) |
+| 최종 결과를 한 번 받기 | 서비스 (`get_result`) |
+
+토픽만으로는 요청/응답이 안 되고, 서비스만으로는 진행률과 취소가 안 된다. 그 둘을 엮은 것이 액션이고, `rclcpp_action` 이 이 다섯 개를 하나의 API로 감싸준다. Step 5 의 "토픽 vs 서비스" 표에 액션이 왜 세 번째 축으로 필요한지가 여기서 설명된다.
 
 ## 자주 밟는 지뢰
 - `handle_accepted`에서 바로 execute를 실행해서 노드 전체가 멈춤(가장 흔함)
