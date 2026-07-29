@@ -7,10 +7,12 @@
 #include "geometry_msgs/msg/pose2_d.hpp"
 #include <string>
 #include "std_msgs/msg/string.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 #include "mini_mission/robot_status.hpp"
 #include "mini_mission/topic.hpp"
 #include "mini_mission/param.hpp"
+#include "mini_mission/service.hpp"
 
 class RobotSim : public rclcpp::Node
 {
@@ -41,6 +43,13 @@ public:
 
     param_cb_ = add_on_set_parameters_callback(
             std::bind(&RobotSim::on_param_change, this, std::placeholders::_1));
+
+    // 서비스 생성
+    reset_srv_ = create_service<std_srvs::srv::Trigger>(
+      mini_mission::service::RESET_POSE,
+      std::bind(&RobotSim::on_reset, this, std::placeholders::_1, std::placeholders::_2)
+    );
+
     // 로봇 노드 시작
     RCLCPP_INFO(get_logger(), "robot_sim started");
   }
@@ -115,6 +124,23 @@ private:
     return result;
   }
 
+  void on_reset(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    (void)req;
+    const bool already = (x_ == 0.0 && y_ == 0.0 && theta_ == 0.0);
+    this->x_ = 0.0;
+    this->y_ = 0.0;
+    this->theta_ = 0.0;
+    res->success = true;
+    res->message = "Robot position reset to (0, 0, 0)";
+    if (already) {
+      res->message += "(already at origin)";
+    }
+    RCLCPP_INFO(get_logger(), res->message.c_str());
+  }
+
   void reset_timer()
   {
     timer_ = create_wall_timer(
@@ -145,6 +171,8 @@ private:
 
   std::string status_{mini_mission::robot_status::NONE};
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
+
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
 };
 
 int main(int argc, char ** argv)
