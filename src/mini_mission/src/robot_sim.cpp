@@ -13,6 +13,7 @@
 #include "mini_mission/topic.hpp"
 #include "mini_mission/param.hpp"
 #include "mini_mission/service.hpp"
+#include "mini_mission/action.hpp"
 
 #include <cmath>
 #include <thread>
@@ -21,6 +22,9 @@
 
 using NavigateTo = mini_mission_interfaces::action::NavigateTo;
 using GoalHandle = rclcpp_action::ServerGoalHandle<NavigateTo>;
+
+constexpr auto & mock_arg_1 = std::placeholders::_1;
+constexpr auto & mock_arg_2 = std::placeholders::_2;
 
 class RobotSim : public rclcpp::Node
 {
@@ -48,21 +52,21 @@ public:
     publish_rate_  = get_parameter(mini_mission::param::PUBLISH_RATE).as_double();
     reset_timer();
     param_cb_ = add_on_set_parameters_callback(
-            std::bind(&RobotSim::on_param_change, this, std::placeholders::_1));
+            std::bind(&RobotSim::on_param_change, this, mock_arg_1));
 
     // 서비스 생성
     reset_srv_ = create_service<std_srvs::srv::Trigger>(
       mini_mission::service::RESET_POSE,
-      std::bind(&RobotSim::on_reset, this, std::placeholders::_1, std::placeholders::_2)
+      std::bind(&RobotSim::on_reset, this, mock_arg_1, mock_arg_2)
     );
 
     //액션서버 생성
     nav_server_ = rclcpp_action::create_server<NavigateTo>(
-      this, "navigate_to",
-      std::bind(&RobotSim::handle_goal, this,
-        std::placeholders::_1, std::placeholders::_2),
-      std::bind(&RobotSim::handle_cancel, this, std::placeholders::_1),
-      std::bind(&RobotSim::handle_accepted, this, std::placeholders::_1)
+      this, 
+      mini_mission::action::NAVIGATE_TO,
+      std::bind(&RobotSim::handle_goal, this, mock_arg_1, mock_arg_2),
+      std::bind(&RobotSim::handle_cancel, this, mock_arg_1),
+      std::bind(&RobotSim::handle_accepted, this, mock_arg_1)
     );
 
     // 로봇 노드 시작

@@ -7,6 +7,9 @@
 #include "mini_mission/robot_status.hpp"
 #include "mini_mission/topic.hpp"
 
+constexpr auto & mock_arg_1 = std::placeholders::_1;
+constexpr auto & mock_arg_2 = std::placeholders::_2;
+
 class MissionClient : public rclcpp::Node
 {
 public:
@@ -17,12 +20,12 @@ public:
     odom_sub_ = create_subscription<geometry_msgs::msg::Pose2D>(
       mini_mission::topic::ODOM, 
       rclcpp::QoS(rclcpp::SensorDataQoS()), 
-      std::bind(&MissionClient::on_odom, this, std::placeholders::_1)
+      std::bind(&MissionClient::on_odom, this, mock_arg_1)
     );
     status_sub_ = create_subscription<std_msgs::msg::String>(
       mini_mission::topic::ROBOT_STATUS, 
       rclcpp::QoS(1).reliable().transient_local(),
-      std::bind(&MissionClient::on_status, this, std::placeholders::_1)
+      std::bind(&MissionClient::on_status, this, mock_arg_1)
     );
   }
 
