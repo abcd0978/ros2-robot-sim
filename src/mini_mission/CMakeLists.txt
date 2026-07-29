@@ -8,9 +8,11 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(mini_mission_interfaces REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -25,11 +27,11 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(robot_sim src/robot_sim.cpp)
-ament_target_dependencies(robot_sim rclcpp geometry_msgs std_msgs std_srvs)
+ament_target_dependencies(robot_sim rclcpp geometry_msgs std_msgs std_srvs rclcpp_action mini_mission_interfaces)
 target_include_directories(robot_sim PRIVATE include)
 
 add_executable(mission_client src/mission_client.cpp)
-ament_target_dependencies(mission_client rclcpp geometry_msgs std_msgs std_srvs)
+ament_target_dependencies(mission_client rclcpp geometry_msgs std_msgs std_srvs rclcpp_action mini_mission_interfaces)
 target_include_directories(mission_client PRIVATE include)
 
 install(TARGETS
