@@ -65,7 +65,7 @@ install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 ## 검증
 ```bash
-colcon build --packages-select mini_mission
+colcon build --symlink-install --packages-select mini_mission
 source install/setup.bash
 ros2 launch mini_mission mission.launch.py
 ```

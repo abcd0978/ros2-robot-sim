@@ -75,9 +75,18 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 빌드 후 확인:
 ```bash
 cd ~/ros2-robot-sim
-colcon build --packages-select mini_mission_interfaces
+colcon build --symlink-install --packages-select mini_mission_interfaces
 source install/setup.bash
 ros2 interface show mini_mission_interfaces/action/NavigateTo
+```
+
+`--symlink-install` 을 빼먹지 않는다. 한 번이라도 이 옵션 없이 빌드하면 `build/` 안에 실제 디렉토리가
+만들어지고, 다음에 옵션을 붙여 빌드할 때 그 자리에 심볼릭 링크를 만들지 못해
+`failed to create symbolic link ... Is a directory` 로 실패한다. 이미 그렇게 됐다면 해당 패키지의
+산출물을 지우고 다시 빌드한다:
+```bash
+rm -rf build/mini_mission_interfaces install/mini_mission_interfaces
+colcon build --symlink-install
 ```
 
 여기까지가 인터페이스 정의다. 액션 하나가 실제로 어떤 통신으로 구현되는지는 서버가 떠 있어야 볼 수 있으므로, 6-B 를 마친 뒤 아래 "검증"에서 확인한다.
@@ -86,7 +95,34 @@ ros2 interface show mini_mission_interfaces/action/NavigateTo
 
 ## 6-B. robot_sim에 액션 서버 추가
 
-`mini_mission`의 `package.xml`/`CMakeLists.txt`에 `rclcpp_action`, `mini_mission_interfaces` 의존을 추가한다.
+`mini_mission`에 `rclcpp_action`, `mini_mission_interfaces` 의존을 추가한다. **세 군데다** — 하나라도
+빠지면 증상이 각각 다르게 나온다.
+
+`package.xml`:
+```xml
+<depend>rclcpp_action</depend>
+<depend>mini_mission_interfaces</depend>
+```
+
+`CMakeLists.txt` — `find_package` 와 `ament_target_dependencies` 양쪽 모두:
+```cmake
+find_package(rclcpp_action REQUIRED)
+find_package(mini_mission_interfaces REQUIRED)
+
+ament_target_dependencies(robot_sim
+  rclcpp rclcpp_action geometry_msgs std_msgs std_srvs mini_mission_interfaces)
+```
+
+| 빠뜨린 곳 | 증상 |
+|---|---|
+| `package.xml` `<depend>` | colcon 빌드 순서가 안 잡히고, 남의 환경에서 `rosdep` 이 의존을 못 깐다 |
+| `find_package(X REQUIRED)` | `ament_target_dependencies() the passed package name 'X' was not found before` |
+| `ament_target_dependencies(... X)` | `fatal error: X/....hpp: No such file or directory` |
+
+`std_msgs` 나 `std_srvs` 는 Step 0 의 `ros2 pkg create --dependencies` 가 `find_package` 를 미리
+넣어줘서 두 군데만 손봐도 됐다. 직접 추가하는 의존부터는 세 군데 전부 필요하다.
+
+`mission_client` 도 Step 7 에서 같은 둘이 필요하니 지금 같이 넣어두면 편하다.
 
 ## 스켈레톤
 **아래 스켈레톤은 그대로 붙여넣으면 컴파일된다. 내부 TODO만 채우면 된다.**
