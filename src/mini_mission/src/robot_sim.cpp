@@ -142,7 +142,7 @@ private:
     }
     return result;
   }
-
+  // reset_pose 서비스 콜백
   void on_reset(
     const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
     std::shared_ptr<std_srvs::srv::Trigger::Response> res)
@@ -160,13 +160,14 @@ private:
     RCLCPP_INFO(get_logger(), res->message.c_str());
   }
 
+  // publish_rate_ 변경 시 타이머 재설정
   void reset_timer()
   {
     timer_ = create_wall_timer(
     std::chrono::duration<double>(1.0 / publish_rate_),
     std::bind(&RobotSim::on_timer, this));
   }
-
+  // tick 마다 오도메트리 퍼블리시
   void on_timer()
   {
     geometry_msgs::msg::Pose2D msg;
@@ -176,6 +177,11 @@ private:
     odom_pub_->publish(msg);
   }
 
+  /**
+   * 액션 서버 콜백
+   */
+
+  // 
   rclcpp_action::GoalResponse handle_goal(
     const rclcpp_action::GoalUUID & uuid,
     std::shared_ptr<const NavigateTo::Goal> goal)
@@ -194,20 +200,53 @@ private:
 
   void handle_accepted(const std::shared_ptr<GoalHandle> goal_handle)
   {
-    // TODO: std::thread{std::bind(&RobotSim::execute, this, goal_handle)}.detach();
-    //       여기서 execute 를 직접 부르면 노드 전체가 멈춘다
-    (void)goal_handle;
+    std::thread{std::bind(&RobotSim::execute, this, goal_handle)}.detach();
   }
 
+  // handle_accepted 가 띄운 별도 스레드에서 돈다. executor 스레드가 아니므로 여기서는 블로킹해도 된다.
   void execute(const std::shared_ptr<GoalHandle> goal_handle)
   {
-    // TODO: 루프
-    //   1) 목표까지 남은 거리 계산
-    //   2) pos_tolerance_ 이내면 결과 채우고 goal_handle->succeed(result) 후 종료
-    //   3) 아니면 max_speed_ * dt 만큼 전진, set_status("MOVING")
-    //   4) goal_handle->publish_feedback(feedback)
-    //   5) publish_rate_ 주기로 sleep 후 반복
-    (void)goal_handle;
+    const auto start = now();
+    const auto goal = goal_handle->get_goal();
+    auto result = std::make_shared<NavigateTo::Result>();
+    auto feedback = std::make_shared<NavigateTo::Feedback>();
+
+    while (rclcpp::ok()) {
+      const double dx = goal->x - x_;
+      const double dy = goal->y - y_;
+      const double dist = std::hypot(dx, dy);
+      
+      // 도착 판정
+      if (dist <= pos_tolerance_) {
+        x_ = goal->x;                       // 허용 오차 안이면 목표에 스냅
+        y_ = goal->y;
+        set_status(mini_mission::robot_status::REACHED);
+        result->elapsed_sec = (now() - start).seconds();
+        result->reached = true;
+        goal_handle->succeed(result);        // 이걸 안 부르면 클라이언트가 결과를 영영 못 받는다
+        RCLCPP_INFO(get_logger(), "goal reached in %.2fs", result->elapsed_sec);
+        return;
+      }
+
+      set_status(mini_mission::robot_status::MOVING);
+
+      // 파라미터는 매 루프마다 다시 읽는다 — 실행 중 ros2 param set 이 반영되어야 하므로
+      const double dt = 1.0 / publish_rate_;
+      const double step = max_speed_ * dt;
+      if (step >= dist) {
+        x_ = goal->x;                       // 한 스텝에 지나칠 거리면 목표에 맞춘다(오버슈트 방지)
+        y_ = goal->y;
+      } else {
+        x_ += dx / dist * step;             // dx/dist 가 단위 방향벡터
+        y_ += dy / dist * step;
+      }
+
+      feedback->distance_remaining = dist;
+      goal_handle->publish_feedback(feedback);
+
+      std::this_thread::sleep_for(std::chrono::duration<double>(dt));
+    }
+    // rclcpp::ok() 가 false — 종료 중이므로 그냥 빠져나온다
   }
 
 
